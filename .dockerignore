@@ -1,0 +1,12 @@
+.git
+.codebuddy
+.deploy
+node_modules
+frontend/node_modules
+backend/tmp
+backend/__pycache__
+__pycache__
+*.pyc
+.venv
+.env
+*.log

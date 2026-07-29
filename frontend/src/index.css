@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+    color: #0f172a;
+  }
+  body {
+    background-color: #f8fafc;
+    background-image:
+      radial-gradient(1100px 500px at 80% -10%, rgba(79, 70, 229, 0.07), transparent 60%),
+      radial-gradient(900px 420px at 0% 0%, rgba(37, 99, 235, 0.06), transparent 55%);
+    background-repeat: no-repeat;
+    min-height: 100vh;
+  }
+  /* 数字统一使用等宽表格数字，像台账一样对齐 */
+  .num {
+    font-family: Montserrat, 'PingFang SC', sans-serif;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+  }
+  :focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white/85 backdrop-blur rounded-2xl border border-slate-200/80 shadow-card;
+  }
+  /* 台账横线：报表卡片内的分隔 */
+  .ledger-row {
+    @apply border-b border-dashed border-slate-200/90;
+  }
+}
