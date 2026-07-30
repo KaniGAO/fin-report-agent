@@ -46,6 +46,38 @@ def extract_year(text: str) -> str | None:
     return m.group(0) if m else None
 
 
+# 元数据行白名单：这些标签是报表的辅助信息，不应当作财务项目
+_METADATA_LABELS = {
+    "报告期", "报表类型", "单位", "币种", "编制单位", "编制日期",
+    "项目", "会计机构",
+}
+
+
+def _is_metadata_label(name: str) -> bool:
+    """判断是否为元数据标签（报告期/报表类型/单位/会计…），不应计入项目"""
+    name = str(name).strip()
+    if not name:
+        return False
+    if name in _METADATA_LABELS:
+        return True
+    if any(k in name for k in ("会计", "编制", "负责人", "法定代表人", "主管")):
+        return True
+    return False
+
+
+def _looks_numeric(text: str) -> bool:
+    """判断文本是否像数值（允许逗号/百分号/负号），用于过滤非数值文本"""
+    t = str(text).strip()
+    if not t:
+        return False
+    t2 = t.replace(",", "").replace("，", "").replace("%", "")
+    try:
+        float(t2)
+        return True
+    except ValueError:
+        return False
+
+
 def _cell_str(v) -> str:
     if v is None:
         return ""
@@ -83,14 +115,15 @@ def parse_excel(path: str | Path) -> list[ExcelStatement]:
         st_type = detect_statement_type(*head_texts)
 
         # 3) 数据行：表头之下，首列为项目名，年份列取值
+        #    仅采纳数值型单元格，跳过「一季报/母公司报表」等非数值文本，避免污染匹配
         data: dict[str, dict[str, str]] = {}
         for row in rows[header_idx + 1:]:
             item = row[0].strip() if row and row[0] else ""
-            if not item:
+            if not item or _is_metadata_label(item):
                 continue
             values = {}
             for j, year in year_cols.items():
-                if j < len(row) and row[j] != "":
+                if j < len(row) and row[j] != "" and _looks_numeric(row[j]):
                     values[year] = row[j]
             if values:
                 data[item] = values

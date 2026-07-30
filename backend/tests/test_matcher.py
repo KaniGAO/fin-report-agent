@@ -128,12 +128,72 @@ def test_bilingual_e2e(workdir: Path):
     assert fill_plan  # 至少有一条回填记录
 
 
+def test_docx_robust(workdir: Path):
+    """鲁棒解析：年份表头下沉、含元数据/小节行、标签列非首列 等变体"""
+    from docx import Document
+
+    # 场景 A：年份表头在第 4 行 + 报告期/报表类型元数据行 + 小节标题
+    doc = Document()
+    doc.add_heading("母公司资产负债表", level=1)
+    table = doc.add_table(rows=1, cols=5)
+    table.style = "Table Grid"
+    rows = [
+        ["母公司资产负债表", "", "", "", ""],
+        ["单位：亿元", "", "", "", ""],
+        ["报告期", "一季报", "年报", "年报", "年报"],
+        ["报表类型", "母公司报表", "母公司报表", "母公司报表", "母公司报表"],
+        ["", "2026-03-31", "2025-12-31", "2024-12-31", "2023-12-31"],
+        ["流动资产：", "", "", "", ""],
+        ["货币资金", "", "", "", ""],
+        ["资产总计", "", "", "", ""],
+    ]
+    for r in rows:
+        cells = table.add_row().cells
+        for ci, v in enumerate(r):
+            cells[ci].text = v
+    docx_path = workdir / "realistic.docx"
+    doc.save(docx_path)
+
+    _, tables = parse_docx(str(docx_path))
+    assert len(tables) == 1, len(tables)
+    dt = tables[0]
+    assert dt.statement_type == "资产负债表", dt.statement_type
+    assert dt.year_cols == {1: "2026", 2: "2025", 3: "2024", 4: "2023"}, dt.year_cols
+    names = set(dt.item_rows.values())
+    assert "货币资金" in names and "资产总计" in names, names
+    # 元数据行 / 小节标题 / 标题行 均不在项目行
+    assert "报告期" not in names and "报表类型" not in names, names
+    assert "流动资产：" not in names and "母公司资产负债表" not in names, names
+
+    # 场景 B：标签列非首列（第 0 列是序号，第 1 列是名称，年份在第 2/3 列）
+    doc2 = Document()
+    doc2.add_heading("利润表", level=1)
+    t2 = doc2.add_table(rows=1, cols=4)
+    t2.style = "Table Grid"
+    hdr = t2.add_row().cells
+    hdr[0].text, hdr[1].text, hdr[2].text, hdr[3].text = "序号", "项目", "2023年度", "2024年度"
+    for i, name in enumerate(["营业收入", "净利润"], start=1):
+        cells = t2.add_row().cells
+        cells[0].text = str(i)      # 序号（数值列）
+        cells[1].text = name        # 名称（应被识别为标签列）
+    docx2 = workdir / "seq.docx"
+    doc2.save(docx2)
+    _, tables2 = parse_docx(str(docx2))
+    assert tables2, "序号+名称布局应被识别"
+    dt2 = tables2[0]
+    assert dt2.item_rows, dt2.item_rows
+    # 标签列应识别到第 1 列（名称），而非第 0 列（序号）
+    vals = set(dt2.item_rows.values())
+    assert "营业收入" in vals and "净利润" in vals, vals
+
+
 def run():
     test_basic()
     test_bilingual()
     import tempfile
     with tempfile.TemporaryDirectory() as td:
         test_bilingual_e2e(Path(td))
+        test_docx_robust(Path(td))
     print("test_matcher: ALL PASS")
 
 

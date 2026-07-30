@@ -62,5 +62,54 @@ def run():
     print(f"\ntest_pipeline: ALL PASS，输出 {out}")
 
 
+def run_realistic():
+    """用户真实格式端到端：年份表头在第 4 行、含报告期/报表类型/小节标题行"""
+    docx_path = SAMPLES / "realistic_template.docx"
+    excel_paths = [SAMPLES / "母公司资产负债表.xlsx"]
+
+    reports, fill_plan, warnings = analyze(docx_path, excel_paths)
+    assert len(reports) == 1, f"应识别 1 张表，实际 {len(reports)}"
+    rep = reports[0]
+    assert rep.statement_type == "资产负债表", rep.statement_type
+    # 年份列顺序：最新年在前
+    assert rep.year_columns == ["2026", "2025", "2024", "2023"], rep.year_columns
+
+    names = {it.docx_item for it in rep.items}
+    # 真实项目应被识别
+    assert "货币资金" in names and "资产总计" in names, names
+    # 元数据行与小节标题应被过滤
+    assert "报告期" not in names, names
+    assert "报表类型" not in names, names
+    assert "流动资产：" not in names, names
+    assert "非流动资产：" not in names, names
+    # 全部匹配（模板与 Excel 同名）
+    assert rep.unmatched_count == 0, [i.docx_item for i in rep.items if i.status != "matched"]
+
+    out = SAMPLES / "realistic_filled.docx"
+    fill_docx(docx_path, fill_plan, out)
+    doc = Document(str(out))
+
+    def cell_of(item, col):
+        table = doc.tables[0]
+        for row in table.rows:
+            if row.cells[0].text.strip() == item:
+                return row.cells[col].text.strip()
+        raise AssertionError(f"未找到项目 {item}")
+
+    def num(item, col):
+        return float(cell_of(item, col))
+
+    # 货币资金：2026=44.28, 2025=10.60, 2024=23.48, 2023=18.90（数值等价，允许 10.6）
+    assert num("货币资金", 1) == 44.28, cell_of("货币资金", 1)
+    assert num("货币资金", 2) == 10.60, cell_of("货币资金", 2)
+    assert num("货币资金", 3) == 23.48, cell_of("货币资金", 3)
+    assert num("货币资金", 4) == 18.90, cell_of("货币资金", 4)
+    # 资产总计回填
+    assert num("资产总计", 1) == 92.28, cell_of("资产总计", 1)
+
+    print(f"\ntest_pipeline (realistic): ALL PASS，输出 {out}")
+
+
 if __name__ == "__main__":
     run()
+    run_realistic()

@@ -18,6 +18,12 @@ app.add_middleware(
 
 app.include_router(router)
 
+
+@app.get("/api/health")
+async def health():
+    return {"status": "ok"}
+
+
 # 生产模式：托管前端构建产物
 _DIST = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
 if _DIST.exists():

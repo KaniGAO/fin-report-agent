@@ -129,6 +129,65 @@ def gen_excels():
         print(f"生成 {path}")
 
 
+# ---------- 「用户格式」样例：年份表头在第 4 行、含报告期/报表类型元数据行、含小节标题 ----------
+# 模拟用户真实「母公司资产负债表」：单位行/报告期/报表类型 占位，年份行下沉，项目名在第 0 列
+REAL_YEARS = ["2026-03-31", "2025-12-31", "2024-12-31", "2023-12-31"]
+REAL_ITEMS = [
+    ("流动资产：", None),                       # 小节标题（应被过滤）
+    ("货币资金", ("货币资金", 44.28, 10.60, 23.48, 18.90)),
+    ("应收账款", ("应收账款", 12.30, 9.80, 8.10, 7.50)),
+    ("存货", ("存货", 5.60, 4.20, 3.90, 3.10)),
+    ("流动资产合计", ("流动资产合计", 62.18, 24.60, 35.48, 29.50)),
+    ("非流动资产：", None),                     # 小节标题
+    ("固定资产", ("固定资产", 30.10, 28.40, 27.00, 25.50)),
+    ("资产总计", ("资产总计", 92.28, 52.00, 62.48, 55.00)),
+]
+
+
+def gen_realistic():
+    """生成用户真实格式 Word 模板 + 对应中文 Excel，用于验证鲁棒解析器。"""
+    # Word 模板（数值列留空，待回填）
+    doc = Document()
+    doc.add_heading("母公司资产负债表", level=1)   # 用于报表类型识别
+    table = doc.add_table(rows=1, cols=1 + len(REAL_YEARS))
+    table.style = "Table Grid"
+    rows = [
+        ["母公司资产负债表", "", "", "", ""],       # 标题行（无年份）
+        ["单位：亿元", "", "", "", ""],             # 单位行（无年份）
+        ["报告期", "一季报", "年报", "年报", "年报"],      # 元数据行
+        ["报表类型", "母公司报表", "母公司报表", "母公司报表", "母公司报表"],  # 元数据行
+        ["", *REAL_YEARS],                          # 真正的年份表头（第 4 行）
+    ]
+    for r in rows:
+        cells = table.add_row().cells
+        for ci, v in enumerate(r):
+            cells[ci].text = v
+
+    for label, _ in REAL_ITEMS:
+        cells = table.add_row().cells
+        cells[0].text = label
+        for ci in range(1, len(REAL_YEARS) + 1):
+            cells[ci].text = ""   # 数值列留空
+
+    path = OUT / "realistic_template.docx"
+    doc.save(path)
+    print(f"生成 {path}")
+
+    # 对应 Excel（项目名与模板一致，年份格式一致）
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "母公司资产负债表"
+    ws.append(["母公司资产负债表"])
+    ws.append(["项目", *REAL_YEARS])
+    for _, payload in REAL_ITEMS:
+        if payload is not None:
+            ws.append(list(payload))
+    xlsx = OUT / "母公司资产负债表.xlsx"
+    wb.save(xlsx)
+    print(f"生成 {xlsx}")
+
+
 if __name__ == "__main__":
     gen_docx()
     gen_excels()
+    gen_realistic()
