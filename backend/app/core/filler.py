@@ -7,6 +7,7 @@ from ..schemas import ItemMatch, TableMatch
 from .docx_parser import DocxTable, parse_docx
 from .excel_parser import ExcelStatement, parse_excel
 from .matcher import match_item
+from .units import convert_value
 
 
 def _pick_statement(
@@ -34,13 +35,14 @@ def _pick_statement(
 
 def build_matches(
     doc_tables: list[DocxTable], statements: list[ExcelStatement]
-) -> tuple[list[TableMatch], dict[tuple[int, int, int], str]]:
+) -> tuple[list[TableMatch], dict[tuple[int, int, int], str], list[str]]:
     """
     生成匹配报告与回填指令。
-    返回 (报告列表, {(表序号, 行, 列): 要填入的值})
+    返回 (报告列表, {(表序号, 行, 列): 要填入的值}, 警告列表)
     """
     reports: list[TableMatch] = []
     fill_plan: dict[tuple[int, int, int], str] = {}
+    warnings: list[str] = []
 
     for dt in doc_tables:
         src = _pick_statement(dt, statements)
@@ -67,7 +69,16 @@ def build_matches(
                 v = year_values.get(year)
                 values[year] = v
                 if v is not None:
-                    fill_plan[(dt.table_index, ri, ci)] = v
+                    # 单位换算：来源单位(src.unit) → 目标单位(dt.unit)
+                    converted = convert_value(v, src.unit, dt.unit)
+                    if converted != v:
+                        src_u = src.unit or "未知"
+                        dt_u = dt.unit or "未知"
+                        warnings.append(
+                            f"[{src.source_file}] 已将「{excel_name}」"
+                            f"单位由 {src_u} 换算为 {dt_u}"
+                        )
+                    fill_plan[(dt.table_index, ri, ci)] = converted
             items.append(
                 ItemMatch(
                     docx_item=docx_name,
@@ -91,7 +102,7 @@ def build_matches(
             )
         )
 
-    return reports, fill_plan
+    return reports, fill_plan, warnings
 
 
 def _set_cell_text(cell, text: str) -> None:
@@ -124,7 +135,8 @@ def analyze(docx_path: str | Path, excel_paths: list[str | Path]):
             warnings.append(f"{Path(p).name} 中未解析到有效报表数据")
         statements.extend(stmts)
 
-    reports, fill_plan = build_matches(doc_tables, statements)
+    reports, fill_plan, match_warnings = build_matches(doc_tables, statements)
+    warnings.extend(match_warnings)
     return reports, fill_plan, warnings
 
 

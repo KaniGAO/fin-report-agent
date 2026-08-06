@@ -7,6 +7,8 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 
+from .units import normalize_unit
+
 YEAR_RE = re.compile(r"(19|20)\d{2}")
 
 STATEMENT_KEYWORDS = [
@@ -23,6 +25,7 @@ class ExcelStatement:
     sheet_name: str
     data: dict[str, dict[str, str]] = field(default_factory=dict)
     # data: {项目名: {年份字符串: 原始值字符串}}
+    unit: str | None = None                    # 来源单位（元/万元/亿元…），未能识别为 None
 
     @property
     def items(self) -> list[str]:
@@ -114,6 +117,9 @@ def parse_excel(path: str | Path) -> list[ExcelStatement]:
         head_texts = [ws.title] + [c for r in rows[: header_idx + 1] for c in r]
         st_type = detect_statement_type(*head_texts)
 
+        # 2.1) 来源单位：从标题行 / 单位标注行（如「利润表（单位：万元）」）中识别
+        unit = normalize_unit(*head_texts)
+
         # 3) 数据行：表头之下，首列为项目名，年份列取值
         #    仅采纳数值型单元格，跳过「一季报/母公司报表」等非数值文本，避免污染匹配
         data: dict[str, dict[str, str]] = {}
@@ -135,6 +141,7 @@ def parse_excel(path: str | Path) -> list[ExcelStatement]:
                     source_file=path.name,
                     sheet_name=ws.title,
                     data=data,
+                    unit=unit,
                 )
             )
 

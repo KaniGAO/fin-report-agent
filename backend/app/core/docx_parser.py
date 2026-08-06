@@ -19,6 +19,7 @@ from .excel_parser import (
     _looks_numeric,
     _is_metadata_label,
 )
+from .units import normalize_unit
 
 
 @dataclass
@@ -28,6 +29,7 @@ class DocxTable:
     header_row: int                      # 表头行号（表内绝对行号）
     year_cols: dict[int, str] = field(default_factory=dict)   # {列号: 年份}
     item_rows: dict[int, str] = field(default_factory=dict)   # {绝对行号: 项目名}
+    unit: str | None = None              # 目标单位（元/万元/亿元…），未能识别为 None
 
 
 def _table_texts(table: Table, max_rows: int = 3) -> list[str]:
@@ -134,6 +136,10 @@ def parse_docx(path: str) -> tuple[Document, list[DocxTable]]:
         if st_type == "未知":
             st_type = detect_statement_type(*_table_texts(table, max_rows=1))
 
+        # 目标单位：从表格前段落（如「单位：亿元」）及表头区域文本中识别
+        unit_texts = _paragraphs_before(doc, table) + _table_texts(table, max_rows=3)
+        unit = normalize_unit(*unit_texts)
+
         # 2) 逐个候选表头切分区间，支持「单表堆叠多张报表」
         for idx, (h, year_cols) in enumerate(header_candidates):
             next_h = header_candidates[idx + 1][0] if idx + 1 < len(header_candidates) else n_rows
@@ -162,6 +168,7 @@ def parse_docx(path: str) -> tuple[Document, list[DocxTable]]:
                         header_row=h,
                         year_cols=year_cols,
                         item_rows=item_rows,
+                        unit=unit,
                     )
                 )
 
